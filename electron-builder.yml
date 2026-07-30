@@ -55,3 +55,8 @@ publish:
   provider: github
   owner: novak-pipeline
   repo: league-companion
+  # electron-builder defaults to a draft release, which is invisible to anyone
+  # but the repo owner and leaves the tag uncreated. The release workflow only
+  # runs after the full check suite passes, so there is nothing left to gate on
+  # — publish for real.
+  releaseType: release
