@@ -64,8 +64,40 @@ jobs:
         run: xvfb-run -a --server-args="-screen 0 1920x1080x24" node_modules/.bin/electron scripts/smoke.mjs --no-sandbox --disable-gpu
 
       - name: Publish installers
-        # electron-builder uploads to the GitHub Release for this tag, creating
-        # it as a draft if it does not exist yet.
+        # electron-builder uploads to the GitHub Release for this version,
+        # creating it if it does not exist yet.
         run: npx electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    name: Publish the release
+    # Only once every platform has finished uploading, so nobody downloads a
+    # release that is missing their installer.
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "value=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # electron-builder only honours `releaseType` when it *creates* the
+      # release. If a draft already exists from an earlier run it uploads into
+      # it and leaves it drafted — invisible to everyone but the repo owner,
+      # with its git tag still uncreated. Flip it explicitly.
+      - name: Mark the release published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::No release found for $TAG"
+            exit 1
+          fi
+          gh release edit "$TAG" --draft=false --latest
+          echo "Published $TAG:"
+          gh release view "$TAG" --json tagName,isDraft,assets \
+            --jq '"\(.tagName) draft=\(.isDraft) assets=\([.assets[].name] | join(", "))"'
