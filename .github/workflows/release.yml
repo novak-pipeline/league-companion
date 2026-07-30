@@ -5,11 +5,16 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Manual dispatch builds whatever ref you run it from. `tag` is optional: with
+  # it empty, electron-builder creates the release for the version in
+  # package.json (tag `v${version}`) and tags the commit it built. That is the
+  # path to use when you cannot push a tag directly.
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g. v0.1.0)'
-        required: true
+        description: 'Existing tag to build (leave empty to release package.json version from this ref)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -30,6 +35,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
+          # electron-builder needs the full history to tag the release commit.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
