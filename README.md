@@ -31,13 +31,14 @@ If you ever distribute this, register it through the [Riot Developer Portal](htt
 
 ## Install
 
-Grab an installer from the [Releases page](https://github.com/novak-pipeline/league-companion/releases):
+Grab an installer from the [Releases page](https://github.com/novak-pipeline/league-companion/releases/latest):
 
 | Platform | File |
 |---|---|
-| Windows | `League Companion Setup <version>.exe` |
-| macOS | `League Companion-<version>-<arch>.dmg` |
-| Linux | `League Companion-<version>.AppImage` |
+| Windows | [`League-Companion-Setup-0.1.0.exe`](https://github.com/novak-pipeline/league-companion/releases/download/v0.1.0/League-Companion-Setup-0.1.0.exe) |
+| macOS (Apple Silicon) | [`League-Companion-0.1.0-arm64.dmg`](https://github.com/novak-pipeline/league-companion/releases/download/v0.1.0/League-Companion-0.1.0-arm64.dmg) |
+| macOS (Intel) | [`League-Companion-0.1.0-x64.dmg`](https://github.com/novak-pipeline/league-companion/releases/download/v0.1.0/League-Companion-0.1.0-x64.dmg) |
+| Linux | [`League-Companion-0.1.0.AppImage`](https://github.com/novak-pipeline/league-companion/releases/download/v0.1.0/League-Companion-0.1.0.AppImage) |
 
 Builds are unsigned, so Windows SmartScreen shows "unknown publisher" on first run (More info → Run anyway) and macOS needs right-click → Open. Signing requires certificates this project does not have.
 
