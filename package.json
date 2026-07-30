@@ -1,0 +1,53 @@
+{
+  "name": "league-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal League of Legends companion: mid-lane timer overlay, draft assistant, and improvement tracker",
+  "main": "dist/main/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n vite,electron -c cyan,magenta \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "npm run build:node && cross-env LC_DEV=1 electron .",
+    "build": "npm run build:node && npm run build:renderer",
+    "build:node": "tsc -p tsconfig.node.json && npm run build:preload",
+    "build:renderer": "vite build",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.preload.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "refresh-champions": "tsx scripts/refreshChampions.ts",
+    "build:preload": "tsc -p tsconfig.preload.json && node scripts/finalizePreload.mjs",
+    "make:icon": "node scripts/makeIcon.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "release": "npm run build && electron-builder --publish always"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8",
+    "electron-builder": "^25.1.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/novak-pipeline/league-companion.git"
+  },
+  "author": "Max",
+  "license": "MIT"
+}

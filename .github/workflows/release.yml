@@ -1,0 +1,64 @@
+name: Release
+
+# Tagging is the release trigger:
+#   npm version minor && git push --follow-tags
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Never abandon a platform's installer because another platform failed —
+      # a partial release is more useful than none, and the missing one can be
+      # re-run on its own.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The release must not ship code that does not pass its own checks.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Generate icon
+        run: npm run make:icon
+
+      - name: Build
+        run: npm run build
+
+      - name: Smoke test
+        if: runner.os == 'Linux'
+        run: xvfb-run -a --server-args="-screen 0 1920x1080x24" node_modules/.bin/electron scripts/smoke.mjs --no-sandbox --disable-gpu
+
+      - name: Publish installers
+        # electron-builder uploads to the GitHub Release for this tag, creating
+        # it as a draft if it does not exist yet.
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,19 @@
+{
+  // Electron loads preload scripts through require(), so they must be CommonJS
+  // even though the rest of the app is ESM. The build emits this to a .cjs file
+  // so Node does not apply the package's "type": "module" to it.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist/main/preload",
+    "rootDir": "src/preload",
+    "noEmit": false,
+    "sourceMap": true
+  },
+  "include": ["src/preload"]
+}

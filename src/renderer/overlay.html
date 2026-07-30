@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>League Companion Overlay</title>
+    <!--
+      The stylesheet is linked here rather than imported from main.tsx: the
+      renderer tsconfig does not include `vite/client`, so a `.css` import
+      would not typecheck. Vite bundles HTML-linked CSS either way.
+    -->
+    <link rel="stylesheet" href="/overlay/overlay.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/overlay/main.tsx"></script>
+  </body>
+</html>

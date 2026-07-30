@@ -1,0 +1,57 @@
+appId: com.novakpipeline.leaguecompanion
+productName: League Companion
+copyright: Copyright © 2026
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the compiled output ships — sources and tests stay out of the installer.
+files:
+  - dist/**/*
+  - package.json
+  - '!**/*.map'
+
+# The app is self-contained; nothing is fetched at build time.
+npmRebuild: false
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  # Unsigned builds warn on first run under SmartScreen. Signing needs a
+  # certificate the CI does not have; see README for what changes if you buy one.
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: League Companion
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: build/icon.png
+  category: public.app-category.games
+  # Ad-hoc signing only; notarization needs an Apple Developer account.
+  identity: null
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: build/icon.png
+  category: Game
+  synopsis: League of Legends companion overlay and draft assistant
+
+publish:
+  provider: github
+  owner: novak-pipeline
+  repo: league-companion

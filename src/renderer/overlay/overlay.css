@@ -1,0 +1,271 @@
+/*
+ * Overlay styling — focus + periphery.
+ *
+ * This window is transparent and click-through: there is no background behind
+ * the overlay as a whole, only behind the one focus card, so the game stays
+ * readable underneath.
+ *
+ * Two hard rules, both about not stealing attention from the game:
+ *
+ *  1. Severity changes colour, border and font-weight only — never size,
+ *     padding, font metrics or position. The countdown re-renders 10x a second
+ *     and any layout-affecting change would make the card shimmer.
+ *  2. Exactly one element on screen may animate, and only at `urgent`. The
+ *     periphery is static by construction.
+ */
+
+:root {
+  --cue-bg: rgba(10, 12, 16, 0.84);
+  --cue-border: rgba(255, 255, 255, 0.1);
+  --c-dim: #8b93a1;
+  --c-soon: #e8eaed;
+  --c-now: #ffb020;
+  --c-urgent: #ff4d4d;
+  --c-accent: #4a9eff;
+  --shadow-text: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.7);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* --------------------------------------------------------------------- */
+/* Root                                                                    */
+/* --------------------------------------------------------------------- */
+
+.overlay-root {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+
+  /* Scale grows down-right from the anchor so the corner never drifts. */
+  transform-origin: top left;
+
+  /* The window is click-through; keep the DOM inert regardless. */
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+/* --------------------------------------------------------------------- */
+/* Focus cue — the only thing meant to be read                             */
+/* --------------------------------------------------------------------- */
+
+.focus-cue {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  box-sizing: border-box;
+
+  /* Fixed box. Severity may not touch any of these. */
+  min-width: 232px;
+  max-width: 340px;
+  height: 46px;
+  padding: 0 14px;
+
+  border: 1px solid var(--cue-border);
+  border-left: 3px solid var(--c-dim);
+  border-radius: 8px;
+  background: var(--cue-bg);
+  color: var(--c-soon);
+  text-shadow: var(--shadow-text);
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.focus-cue__glyph {
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+  color: inherit;
+}
+
+.focus-cue__label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+}
+
+.focus-cue__eta {
+  /* Fixed metrics: this text changes 10x a second. `ch` on tabular figures
+     gives a box wide enough for "10:00" and for "NOW" without reflowing. */
+  min-width: 4.4ch;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  color: inherit;
+}
+
+/* Severity: colour, border and glow only. */
+
+.focus-cue--idle {
+  color: var(--c-dim);
+  border-left-color: var(--c-dim);
+}
+
+.focus-cue--soon {
+  color: var(--c-soon);
+  border-left-color: var(--c-accent);
+}
+
+.focus-cue--now {
+  color: var(--c-now);
+  border-left-color: var(--c-now);
+  border-color: rgba(255, 176, 32, 0.4);
+  box-shadow: 0 0 14px rgba(255, 176, 32, 0.2);
+}
+
+.focus-cue--urgent {
+  color: var(--c-urgent);
+  border-left-color: var(--c-urgent);
+  border-color: rgba(255, 77, 77, 0.52);
+  box-shadow: 0 0 16px rgba(255, 77, 77, 0.3);
+
+  /* The single animated element on screen. */
+  animation: focus-pulse 900ms ease-in-out infinite;
+}
+
+@keyframes focus-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 16px rgba(255, 77, 77, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(255, 77, 77, 0.6);
+  }
+}
+
+/* --------------------------------------------------------------------- */
+/* Periphery — glanceable, never read                                      */
+/* --------------------------------------------------------------------- */
+
+.periphery {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding-left: 3px;
+
+  /* Sits well below the focus card in contrast: present, not competing. */
+  opacity: 0.62;
+}
+
+.pip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+
+  /* Fixed box so the strip never reflows as digits change width. */
+  height: 20px;
+  padding: 0 7px;
+
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  background: rgba(10, 12, 16, 0.66);
+  color: var(--c-dim);
+  text-shadow: var(--shadow-text);
+  transition: color 150ms ease;
+}
+
+.pip__glyph {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.pip__eta {
+  min-width: 4ch;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Severity in the periphery is a whisper: a hue shift, no glow, no motion. */
+
+.pip--idle {
+  color: var(--c-dim);
+}
+
+.pip--soon {
+  color: #b9c0cc;
+}
+
+.pip--now {
+  color: var(--c-now);
+}
+
+.pip--urgent {
+  color: var(--c-urgent);
+}
+
+/* --------------------------------------------------------------------- */
+/* Demo badge                                                              */
+/* --------------------------------------------------------------------- */
+
+/*
+ * The game clock used to live here and has been dropped: League already renders
+ * one, larger and in a place the player's eye is trained on. Duplicating it
+ * spent attention for zero information.
+ *
+ * The demo badge stays, because it is the only signal that these numbers are
+ * synthetic — but at minimum weight.
+ */
+.overlay-badge {
+  padding: 0 5px;
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-now);
+  text-shadow: var(--shadow-text);
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-cue--urgent {
+    animation: none;
+  }
+
+  .focus-cue,
+  .pip {
+    transition: none;
+  }
+}
