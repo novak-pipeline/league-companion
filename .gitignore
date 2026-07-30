@@ -4,7 +4,11 @@ release/
 *.log
 .DS_Store
 .vite/
-data/
+
+# Anchored to the repo root on purpose. An unanchored `data/` matches every
+# directory of that name at any depth — which silently excluded the whole of
+# src/services/data/ (Data Dragon, Riot API, meta collector) from the repo.
+/data/
 
 # tsc can emit compiled output beside sources when a project's rootDir is
 # violated. Those files then shadow the .ts originals at test time — keep them

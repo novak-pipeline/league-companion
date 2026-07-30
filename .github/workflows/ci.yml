@@ -23,6 +23,19 @@ jobs:
           node-version: 22
           cache: npm
 
+      # A stray .gitignore pattern once excluded all of src/services/data/ from
+      # the repo. Everything passed locally because the files were on disk; only
+      # a fresh checkout revealed it. Fail loudly rather than mysteriously.
+      - name: No source files are gitignored
+        run: |
+          ignored=$(git ls-files --others --ignored --exclude-standard --directory -- src tests scripts)
+          if [ -n "$ignored" ]; then
+            echo "::error::These source paths are excluded by .gitignore:"
+            echo "$ignored"
+            exit 1
+          fi
+          echo "ok: no ignored files under src/, tests/, or scripts/"
+
       - name: Install
         run: npm ci
 
