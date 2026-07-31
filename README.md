@@ -94,15 +94,32 @@ Open the **Data** tab and hit **Toggle demo mode**. A synthetic game drives the 
 
 Transparent overlays cannot draw over a game in **exclusive fullscreen**. Set League to **Borderless** or **Windowed** in its video settings.
 
-### Overlay design: one thing at a time
+### Overlay design: don't repeat the game
 
-A wall of countdowns on top of a live game is worse than nothing — you stop reading it. The overlay is built as **focus + periphery**:
+**The overlay is off by default.** Turn it on in the Data tab. An overlay you did not ask for, sitting on top of a ranked game, should be opt-in.
 
-- **One prominent card** — the single most urgent thing, with a large countdown. This is the only element meant to catch your eye.
-- **A strip of pips** — everything else, glyph and time only, no labels, low contrast. Glanceable, not readable.
+The governing rule: **if you can read it off League's own HUD, it does not belong on the overlay.** The game already draws dragon, baron, herald and grub timers on its scoreboard; redrawing them on top of the game costs attention and returns nothing. Those cue kinds ship muted, and the overlay shows only *derived* information:
+
+| Cue | Why it earns screen space |
+|---|---|
+| **Cannon wave** | The game never tells you which wave has a cannon or when it lands |
+| **Back window** | Derived from wave state — shove the cannon, then recall |
+| **Jungler clear** | Arithmetic, not observation: when a standard clear puts them in position |
+| **Roam window** | The *coincidence* of a shoveable cannon and something worth walking to |
+| **Level spikes** | Only when they cross 6/11/16 before you — the case that gets missed |
+| **CS pace** | How you compare to **your own** recent games at this exact minute |
+
+Every muted kind can be switched back on per-kind in the Data tab; all of them are always visible in the Live tab.
+
+The presentation is **focus + periphery**:
+
+- **One prominent card** — the single most urgent thing. The only element meant to catch your eye.
+- **A strip of pips** — everything else, glyph and time only, no labels. Glanceable, not readable.
 - **Nothing at all** when there is nothing to act on.
 
-The rule the whole design follows: *a visible overlay cue means "act now"*. Anything merely informational belongs on the second monitor. Cues far enough out that there is nothing to do yet (`idle` severity) are dropped entirely below `full` density, and the default horizon is a deliberately tight 45 seconds — a cue that appears two minutes early is a clock, not a prompt.
+Cues far enough out that there is nothing to do yet (`idle` severity) are dropped below `full` density, and the default horizon is a tight 45 seconds — a cue that appears two minutes early is a clock, not a prompt.
+
+On what it deliberately will not do: it never claims to know where the enemy jungler *is*. Riot does not expose enemy positions and inferring them is outside their third-party policy. The jungle cues are clear-timing arithmetic, labelled as estimates.
 
 Density is configurable in the Data tab:
 
@@ -186,11 +203,26 @@ Keeping them separate matters: a champion you're on a hot streak with shouldn't 
 
 ## Timer accuracy
 
-Wave and objective timings live in one file: `src/core/patch.ts`. Riot moves these often — objective spawn times have changed several times per season — so a patch update is a one-file edit and the loaded config's label is shown in the UI rather than being quietly wrong.
+Wave and objective timings live in one file: `src/core/patch.ts`. Riot moves these constantly, and the 2026 season moved them *structurally*:
 
-**Verify `DEFAULT_PATCH` against current patch notes before trusting it in ranked.**
+- **Atakhan removed** (patch 26.1), along with Feats of Strength and Blood Roses.
+- **Baron back to 20:00** (was 25:00 during the Atakhan era).
+- **Void Grubs are a single set spawning at 8:00** — the second set went in 25.09, not 26.1, and the spawn moved from 6:00 in the same patch.
+- **First wave at 0:30** (was 1:05), minions move faster, and the wave interval **steps down to 25s at 14:00 and 20s at 30:00**.
 
-The wave engine models the cannon cadence statefully (every 3rd wave → every 2nd from 15:00 → every wave from 25:00), tracking waves since the last cannon rather than a modulo on the wave index, because Riot continues counting across the cadence change rather than restarting on a fixed boundary.
+### On numbers this project could not verify
+
+Riot does not publish everything, and community sources contradict each other — several widely-quoted "2026" guides still carry pre-season numbers. Rather than launder a guess into an authoritative-looking countdown, unverified values are declared in `DEFAULT_PATCH.caveats` and **shown to the user in the Data tab**, with what is uncertain about each.
+
+Currently flagged: wave travel time (estimated from the move-speed change, not published), the cannon cadence transition (14:00 vs 15:00 — sources disagree), Herald's spawn, and the grub despawn.
+
+Because wave travel time is both the least certain value and the one the cannon countdown depends on most, it is **user-calibratable**: a slider in the Data tab shifts arrival by ±10s, so you can watch one game and dial it in rather than trusting the shipped estimate.
+
+That last one is not a constant-swap. Spawn times have to **accumulate** (`spawnTime += intervalAt(spawnTime)`) rather than multiply (`first + n × interval`), because once the game crosses a step boundary every subsequent wave is wrong under the old model. The cannon counter is likewise stateful — it tracks waves since the last cannon rather than a modulo on the index — because Riot continues counting across a cadence change instead of restarting on a fixed boundary.
+
+**Verify `DEFAULT_PATCH` against current patch notes before trusting it in ranked.** The loaded config's label is shown in the UI for exactly that reason. Objectives carry an `enabled` flag so a removed one (like Atakhan) disappears entirely rather than counting down to something that cannot spawn.
+
+The tests assert the engine's *rules* against whatever config is loaded, not hardcoded clock values — so a patch update changes one file, and a red test means the engine is actually wrong rather than merely out of date.
 
 ---
 

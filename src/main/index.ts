@@ -81,25 +81,53 @@ function buildDataStatus(): DataSourceStatus {
   };
 }
 
+/**
+ * The patch config with the user's wave-arrival calibration folded in.
+ *
+ * Travel time is the least certain value in the config, so the offset is
+ * applied here rather than baked into the defaults — the shipped estimate stays
+ * honest and the user's correction sits on top of it.
+ */
+function activePatch(): typeof DEFAULT_PATCH {
+  const offset = store.getSettings().waveArrivalOffsetSeconds;
+  if (!offset) return DEFAULT_PATCH;
+  const adjust = (value: number) => Math.max(0, value + offset);
+  return {
+    ...DEFAULT_PATCH,
+    laneTravelSeconds: {
+      top: adjust(DEFAULT_PATCH.laneTravelSeconds.top),
+      mid: adjust(DEFAULT_PATCH.laneTravelSeconds.mid),
+      bot: adjust(DEFAULT_PATCH.laneTravelSeconds.bot),
+    },
+  };
+}
+
 function currentCues(): Cue[] {
   if (!snapshot) return [];
   const settings = store.getSettings();
+  // The full list is built unmuted for the companion window; the overlay's
+  // muting is applied separately in buildState so the two windows can differ.
   return buildCues(snapshot, manualTimers, {
     lane: settings.lane,
-    patch: DEFAULT_PATCH,
+    patch: activePatch(),
     horizonSeconds: settings.overlay.horizonSeconds,
-    mutedKinds: settings.overlay.mutedKinds,
+    mutedKinds: [],
+    history: store.getHistory(),
   });
 }
 
 function buildState(): CompanionState {
   const settings = store.getSettings();
   const cues = currentCues();
+  const overlayCues = applyDensity(
+    cues.filter((c) => !settings.overlay.mutedKinds.includes(c.kind)),
+    settings.overlay.density,
+  );
   return {
     mode,
     snapshot,
     cues,
-    overlayCues: applyDensity(cues, settings.overlay.density),
+    overlayCues,
     manualTimers,
     draft,
     draftAdvice,
@@ -109,6 +137,7 @@ function buildState(): CompanionState {
     settings: store.getSafeSettings(),
     jobStatus,
     notices,
+    patchInfo: { label: DEFAULT_PATCH.label, caveats: DEFAULT_PATCH.caveats },
   };
 }
 

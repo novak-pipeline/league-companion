@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { GameRecord } from '../core/types.js';
+import { MIRRORED_CUE_KINDS } from '../core/types.js';
 import type { AppSettings, SafeSettings } from '../shared/ipc.js';
 import { DEFAULT_TARGETS } from '../core/tracking/trends.js';
 
@@ -16,10 +17,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lane: 'mid',
   role: 'mid',
   overlay: {
-    enabled: true,
+    // Off by default. An overlay the user did not ask for, sitting on top of a
+    // ranked game, is the kind of thing that should be opt-in.
+    enabled: false,
     opacity: 0.95,
     scale: 1,
-    mutedKinds: [],
+    // League's own HUD already shows dragon/baron/herald/grub timers. Mirroring
+    // them on top of the game is noise, so the overlay ships showing only what
+    // the game does not tell you. All still visible in the companion window.
+    mutedKinds: [...MIRRORED_CUE_KINDS],
     // Deliberately tight: a cue that appears two minutes early is a clock, not
     // a prompt, and the player learns to ignore it.
     horizonSeconds: 45,
@@ -38,6 +44,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   championPool: [],
   targets: DEFAULT_TARGETS,
   lockfilePaths: [],
+  waveArrivalOffsetSeconds: 0,
 };
 
 async function readJson<T>(file: string): Promise<T | null> {

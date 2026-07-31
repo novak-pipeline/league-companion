@@ -1,5 +1,5 @@
 import type { GameEventRecord } from './types.js';
-import { DEFAULT_PATCH, type PatchConfig } from './patch.js';
+import { DEFAULT_PATCH, type ObjectiveTiming, type PatchConfig } from './patch.js';
 
 /**
  * Neutral objective availability.
@@ -8,9 +8,14 @@ import { DEFAULT_PATCH, type PatchConfig } from './patch.js';
  * event feed (Riot reports dragon/herald/baron kills as events). Scuttle deaths
  * are *not* in the event feed, so scuttle respawns are handled as user-started
  * manual timers instead — see `ManualTimer` in types.ts.
+ *
+ * Note that League's own scoreboard already shows most of these. They are kept
+ * here because the companion window is a fine place for them, but they are
+ * muted on the overlay by default — duplicating the game's HUD on top of the
+ * game is noise, not information.
  */
 
-export type ObjectiveId = 'dragon' | 'grubs' | 'herald' | 'baron' | 'atakhan' | 'scuttle';
+export type ObjectiveId = 'dragon' | 'grubs' | 'herald' | 'baron' | 'scuttle';
 
 export interface ObjectiveStatus {
   id: ObjectiveId;
@@ -41,39 +46,45 @@ function countEventsOf(events: GameEventRecord[], kinds: string[]): number {
 }
 
 /**
- * Computes the next availability for a respawning objective.
- *
- * `firstSpawn` applies until the first kill; afterwards it is
- * `lastKill + respawn`. A null `despawn` means it never expires.
+ * Computes the next availability for one objective from its timing config plus
+ * whatever the event feed has reported.
  */
-function respawningStatus(
+function statusFor(
   id: ObjectiveId,
   label: string,
+  timing: ObjectiveTiming,
   events: GameEventRecord[],
   eventKinds: string[],
   gameTime: number,
-  firstSpawn: number | null,
-  respawn: number | null,
-  despawn: number | null,
-): ObjectiveStatus {
+): ObjectiveStatus | null {
+  if (!timing.enabled) return null;
+
   const last = lastEventOf(events, eventKinds);
   const takenCount = countEventsOf(events, eventKinds);
 
   let availableAt: number | null;
   if (!last) {
-    availableAt = firstSpawn;
-  } else if (respawn === null) {
+    availableAt = timing.firstSpawn;
+  } else if (timing.respawn === null) {
     availableAt = null;
   } else {
-    availableAt = last.gameTime + respawn;
+    availableAt = last.gameTime + timing.respawn;
   }
 
-  // Past its despawn window (grubs and herald both expire) it is gone for good.
-  if (availableAt !== null && despawn !== null && availableAt >= despawn) {
+  // A spawn cap retires the objective once it has been taken that many times.
+  if (timing.maxSpawns !== null && takenCount >= timing.maxSpawns) {
     availableAt = null;
   }
 
-  const isUp = availableAt !== null && gameTime >= availableAt && (despawn === null || gameTime < despawn);
+  // Past its despawn window it is gone for good, even if a respawn would land.
+  if (availableAt !== null && timing.despawn !== null && availableAt >= timing.despawn) {
+    availableAt = null;
+  }
+
+  const isUp =
+    availableAt !== null &&
+    gameTime >= availableAt &&
+    (timing.despawn === null || gameTime < timing.despawn);
 
   return {
     id,
@@ -81,8 +92,8 @@ function respawningStatus(
     availableAt,
     isUp,
     takenCount,
-    lastTakenBy: last?.killer,
-    lastSubtype: last?.subtype,
+    ...(last?.killer ? { lastTakenBy: last.killer } : {}),
+    ...(last?.subtype ? { lastSubtype: last.subtype } : {}),
   };
 }
 
@@ -91,67 +102,16 @@ export function objectiveStatuses(
   events: GameEventRecord[],
   patch: PatchConfig = DEFAULT_PATCH,
 ): ObjectiveStatus[] {
-  const statuses: ObjectiveStatus[] = [
-    respawningStatus(
-      'dragon',
-      'Dragon',
-      events,
-      ['DragonKill'],
-      gameTime,
-      patch.dragonFirstSpawn,
-      patch.dragonRespawn,
-      null,
-    ),
-    respawningStatus(
-      'grubs',
-      'Void Grubs',
-      events,
-      ['HordeKill'],
-      gameTime,
-      patch.grubsFirstSpawn,
-      // Grubs come in two sets; after the second they are gone. Treated as a
-      // single respawn so the timer stops rather than looping forever.
-      countEventsOf(events, ['HordeKill']) >= 2 ? null : patch.grubsFirstSpawn,
-      patch.grubsDespawn,
-    ),
-    respawningStatus(
-      'herald',
-      'Rift Herald',
-      events,
-      ['HeraldKill'],
-      gameTime,
-      patch.heraldFirstSpawn,
-      null,
-      patch.heraldDespawn,
-    ),
-    respawningStatus(
-      'baron',
-      'Baron Nashor',
-      events,
-      ['BaronKill'],
-      gameTime,
-      patch.baronFirstSpawn,
-      patch.baronRespawn,
-      null,
-    ),
+  const specs: Array<[ObjectiveId, string, ObjectiveTiming, string[]]> = [
+    ['dragon', 'Dragon', patch.dragon, ['DragonKill']],
+    ['grubs', 'Void Grubs', patch.grubs, ['HordeKill']],
+    ['herald', 'Rift Herald', patch.herald, ['HeraldKill']],
+    ['baron', 'Baron Nashor', patch.baron, ['BaronKill']],
   ];
 
-  if (patch.atakhanFirstSpawn !== null) {
-    statuses.push(
-      respawningStatus(
-        'atakhan',
-        'Atakhan',
-        events,
-        ['AtakhanKill'],
-        gameTime,
-        patch.atakhanFirstSpawn,
-        null,
-        null,
-      ),
-    );
-  }
-
-  return statuses;
+  return specs
+    .map(([id, label, timing, kinds]) => statusFor(id, label, timing, events, kinds, gameTime))
+    .filter((s): s is ObjectiveStatus => s !== null);
 }
 
 /**
@@ -162,12 +122,13 @@ export function objectiveStatuses(
 export function firstScuttleStatus(
   gameTime: number,
   patch: PatchConfig = DEFAULT_PATCH,
-): ObjectiveStatus {
+): ObjectiveStatus | null {
+  if (!patch.scuttle.enabled) return null;
   return {
     id: 'scuttle',
     label: 'Scuttle Crab',
-    availableAt: patch.scuttleFirstSpawn,
-    isUp: gameTime >= patch.scuttleFirstSpawn,
+    availableAt: patch.scuttle.firstSpawn,
+    isUp: gameTime >= patch.scuttle.firstSpawn,
     takenCount: 0,
   };
 }

@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { AppSettings, CompanionState } from '../../../shared/ipc.js';
-import type { Lane, Role } from '../../../core/types.js';
+import type { CueKind, Lane, Role } from '../../../core/types.js';
 import type { OverlayDensity } from '../../../core/cues.js';
 import type { Send } from '../App';
+import { cueGlyph } from '../../shared/cueGlyphs';
 
 interface DataTabProps {
   state: CompanionState;
@@ -13,6 +14,29 @@ interface DataTabProps {
 
 const LANES: Lane[] = ['top', 'mid', 'bot'];
 const ROLES: Role[] = ['top', 'jungle', 'mid', 'adc', 'support'];
+
+/**
+ * Which cue kinds the user can put on or take off the overlay.
+ *
+ * Ordered derived-first, because that ordering *is* the argument: the top group
+ * is what the game does not tell you, the bottom group is what it already does.
+ * `manual` and `reminder` are omitted — the user created those explicitly, so
+ * silently hiding them would be surprising.
+ */
+const CUE_KIND_OPTIONS: Array<{ kind: CueKind; label: string; note: string }> = [
+  { kind: 'cannon', label: 'Cannon wave', note: 'Not shown in game' },
+  { kind: 'back', label: 'Back window', note: 'Derived from wave state' },
+  { kind: 'jungle', label: 'Jungler clear', note: 'Estimated gank windows' },
+  { kind: 'roam', label: 'Roam window', note: 'Cannon shove + objective' },
+  { kind: 'spike', label: 'Level spikes', note: 'When they hit 6 first' },
+  { kind: 'pace', label: 'CS pace', note: 'Against your own history' },
+  { kind: 'wave', label: 'Wave arrival', note: 'Minor; adds chatter' },
+  { kind: 'scuttle', label: 'Scuttle spawn', note: 'First spawn only' },
+  { kind: 'dragon', label: 'Dragon', note: 'Already on the scoreboard' },
+  { kind: 'herald', label: 'Rift Herald', note: 'Already on the scoreboard' },
+  { kind: 'grubs', label: 'Void Grubs', note: 'Already on the scoreboard' },
+  { kind: 'baron', label: 'Baron', note: 'Already on the scoreboard' },
+];
 
 /**
  * Plain-language density options. The mechanism lives in `applyDensity`; this is
@@ -233,6 +257,32 @@ export function DataTab({ state, send }: DataTabProps): JSX.Element {
           official Riot API. They start empty and the sample size grows as collection runs — nothing
           is scraped from third-party sites, and no number is shown before there is data behind it.
         </p>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">Timing config</h2>
+          <span className="page-sub">{state.patchInfo.label}</span>
+        </div>
+        {state.patchInfo.caveats.length === 0 ? (
+          <p className="note">Every value in the timing config is confirmed against patch notes.</p>
+        ) : (
+          <>
+            <p className="note note-strong">
+              Riot does not publish all of these, and some sources disagree. The values below are
+              the app&apos;s best reading rather than confirmed fact — worth checking in-client
+              before you rely on them in a ranked game.
+            </p>
+            <ul className="caveat-list">
+              {state.patchInfo.caveats.map((caveat) => (
+                <li key={caveat.field} className="caveat">
+                  <code className="caveat-field">{caveat.field}</code>
+                  <span className="caveat-note">{caveat.note}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </section>
 
       <section className="panel">
@@ -462,6 +512,60 @@ export function DataTab({ state, send }: DataTabProps): JSX.Element {
             />
             <span className="field-hint">How far ahead cues appear.</span>
           </label>
+
+          <label className="field">
+            <span className="field-label">
+              Wave arrival offset — {settings.waveArrivalOffsetSeconds > 0 ? '+' : ''}
+              {settings.waveArrivalOffsetSeconds}s
+            </span>
+            <input
+              type="range"
+              min={-10}
+              max={10}
+              step={1}
+              value={settings.waveArrivalOffsetSeconds}
+              onChange={(event) => patch({ waveArrivalOffsetSeconds: Number(event.target.value) })}
+            />
+            <span className="field-hint">
+              How long a wave takes to reach lane is the least certain number in the timing config.
+              Watch one game: if the cannon cue fires early, raise this; if late, lower it.
+            </span>
+          </label>
+        </div>
+
+        <div className="cue-kinds">
+          <span className="field-label">What the overlay is allowed to show</span>
+          <span className="field-hint">
+            League already draws dragon, baron, herald and grub timers on its own scoreboard, so
+            those are off here by default — repeating them on top of the game is noise. Everything
+            stays visible in the Live tab regardless.
+          </span>
+          <div className="cue-kind-grid">
+            {CUE_KIND_OPTIONS.map((option) => {
+              const muted = settings.overlay.mutedKinds.includes(option.kind);
+              return (
+                <label key={option.kind} className="cue-kind-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!muted}
+                    onChange={(event) => {
+                      const next = event.target.checked
+                        ? settings.overlay.mutedKinds.filter((k) => k !== option.kind)
+                        : [...settings.overlay.mutedKinds, option.kind];
+                      overlayPatch({ mutedKinds: next });
+                    }}
+                  />
+                  <span className="cue-kind-glyph" aria-hidden="true">
+                    {cueGlyph(option.kind)}
+                  </span>
+                  <span className="cue-kind-body">
+                    <span className="cue-kind-name">{option.label}</span>
+                    <span className="cue-kind-note">{option.note}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
         </div>
       </section>
     </>

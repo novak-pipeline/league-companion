@@ -6,15 +6,22 @@ import type { CueKind } from '../../core/types.js';
  * and it survives the overlay's `img-src`-restricted CSP.
  */
 const KIND_GLYPHS: Record<CueKind, string> = {
+  // Derived — things League does not show you.
   cannon: '◆',
+  back: '⌂',
+  jungle: '🌿',
+  roam: '➜',
+  spike: '⚡',
+  pace: '📉',
+  // Mirrored — things the game's own HUD shows. Muted on the overlay by
+  // default; still available in the companion window.
   wave: '▪',
   scuttle: '🦀',
   dragon: '🐉',
   herald: '👁',
   grubs: '🪱',
   baron: '👑',
-  atakhan: '⚔',
-  back: '⌂',
+  // User-driven.
   manual: '⏱',
   reminder: '!',
 };

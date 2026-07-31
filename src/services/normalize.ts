@@ -80,8 +80,10 @@ const EVENT_MAP: Record<string, GameEventKind> = {
   DragonKill: 'DragonKill',
   HeraldKill: 'HeraldKill',
   BaronKill: 'BaronKill',
-  AtakhanKill: 'AtakhanKill',
   HordeKill: 'HordeKill',
+  // Note: no AtakhanKill. Atakhan was removed from Summoner's Rift in patch
+  // 26.1, so the event cannot occur; an unrecognised name degrades to
+  // 'Unknown' rather than breaking the poll loop.
 };
 
 function normalizeTeam(raw: string | undefined): Team {

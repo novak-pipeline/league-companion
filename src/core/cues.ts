@@ -1,7 +1,8 @@
-import type { Cue, CueSeverity, GameSnapshot, Lane, ManualTimer } from './types.js';
+import type { Cue, CueSeverity, GameRecord, GameSnapshot, Lane, ManualTimer } from './types.js';
 import { DEFAULT_PATCH, type PatchConfig } from './patch.js';
 import { nextBackWindow, nextCannonWave, nextWave } from './waves.js';
 import { firstScuttleStatus, objectiveStatuses } from './objectives.js';
+import { buildInsightCues, makeCsBaseline } from './insights.js';
 
 /**
  * The cue engine.
@@ -18,13 +19,16 @@ export interface CueOptions {
   horizonSeconds: number;
   /** Kinds the user has switched off in settings. */
   mutedKinds: string[];
+  /** Recent games, used to derive a personal CS-pace baseline. */
+  history: GameRecord[];
 }
 
 export const DEFAULT_CUE_OPTIONS: CueOptions = {
   lane: 'mid',
   patch: DEFAULT_PATCH,
-  horizonSeconds: 75,
+  horizonSeconds: 45,
   mutedKinds: [],
+  history: [],
 };
 
 /**
@@ -116,7 +120,7 @@ export function buildCues(
 
   // --- First scuttle -------------------------------------------------------
   const scuttle = firstScuttleStatus(gameTime, patch);
-  if (!scuttle.isUp && scuttle.availableAt !== null) {
+  if (scuttle && !scuttle.isUp && scuttle.availableAt !== null) {
     const eta = scuttle.availableAt - gameTime;
     if (eta <= horizonSeconds) {
       cues.push({
@@ -138,20 +142,10 @@ export function buildCues(
     if (eta > horizonSeconds) continue;
 
     const live = eta <= 0;
-    const kind =
-      obj.id === 'dragon'
-        ? 'dragon'
-        : obj.id === 'herald'
-          ? 'herald'
-          : obj.id === 'grubs'
-            ? 'grubs'
-            : obj.id === 'baron'
-              ? 'baron'
-              : 'atakhan';
 
     cues.push({
       id: `obj-${obj.id}-${obj.takenCount}`,
-      kind,
+      kind: obj.id,
       label: live ? `${obj.label} UP` : obj.label,
       detail: live ? 'Get vision and prio' : `Spawns ${fmt(obj.availableAt)}`,
       etaSeconds: live ? null : eta,
@@ -159,6 +153,19 @@ export function buildCues(
       sortKey: 50,
     });
   }
+
+  // --- Derived insight -----------------------------------------------------
+  // The part League does not already show you: jungle pressure windows, roam
+  // windows, level spikes you are behind on, and CS pace against your own
+  // history. See insights.ts for why each one earns its place.
+  cues.push(
+    ...buildInsightCues({
+      snapshot,
+      lane,
+      patch,
+      csBaseline: makeCsBaseline(opts.history),
+    }),
+  );
 
   // --- Manual timers -------------------------------------------------------
   for (const timer of manualTimers) {

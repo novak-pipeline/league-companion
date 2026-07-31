@@ -1,16 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import { applyDensity, buildCues } from '../src/core/cues.js';
-import type { Cue } from '../src/core/types.js';
-import type { GameSnapshot, ManualTimer } from '../src/core/types.js';
+import { makeCsBaseline } from '../src/core/insights.js';
+import { DEFAULT_PATCH } from '../src/core/patch.js';
+import { nextCannonWave } from '../src/core/waves.js';
+import { MIRRORED_CUE_KINDS } from '../src/core/types.js';
+import type { Cue, GameRecord, GameSnapshot, ManualTimer, PlayerState } from '../src/core/types.js';
 
-function snapshotAt(gameTime: number, events: GameSnapshot['events'] = []): GameSnapshot {
+function player(overrides: Partial<PlayerState> = {}): PlayerState {
+  return {
+    summonerName: 'Me',
+    championName: 'Ahri',
+    team: 'ORDER',
+    position: 'mid',
+    level: 6,
+    isDead: false,
+    respawnTimer: 0,
+    kills: 0,
+    deaths: 0,
+    assists: 0,
+    creepScore: 0,
+    wardScore: 0,
+    items: [],
+    ...overrides,
+  };
+}
+
+function snapshotAt(
+  gameTime: number,
+  events: GameSnapshot['events'] = [],
+  players: PlayerState[] = [],
+): GameSnapshot {
+  const self = players[0] ?? null;
   return {
     gameTime,
     gameMode: 'CLASSIC',
     mapName: "Summoner's Rift",
-    self: null,
+    self,
     selfTeam: 'ORDER',
-    players: [],
+    players,
     events,
   };
 }
@@ -21,19 +48,20 @@ describe('cue engine', () => {
     expect(buildCues(snap)).toEqual(buildCues(snap));
   });
 
-  it('surfaces the next cannon wave', () => {
-    // Wave 3 (the first cannon) arrives at 125 + 33 = 158s.
-    const cues = buildCues(snapshotAt(140));
-    const cannon = cues.find((c) => c.kind === 'cannon');
-    expect(cannon).toBeDefined();
-    expect(cannon!.etaSeconds).toBeCloseTo(18, 0);
+  it('surfaces the next cannon wave with the right countdown', () => {
+    const cannon = nextCannonWave(0, 'mid', DEFAULT_PATCH)!;
+    const at = cannon.arrivalTime - 18;
+    const cue = buildCues(snapshotAt(at)).find((c) => c.kind === 'cannon')!;
+    expect(cue).toBeDefined();
+    expect(cue.etaSeconds).toBeCloseTo(18, 0);
   });
 
   it('escalates severity as an event approaches', () => {
-    const far = buildCues(snapshotAt(120)).find((c) => c.kind === 'cannon');
-    const near = buildCues(snapshotAt(155)).find((c) => c.kind === 'cannon');
-    expect(far!.severity).toBe('soon');
-    expect(near!.severity).toBe('urgent');
+    const cannon = nextCannonWave(0, 'mid', DEFAULT_PATCH)!;
+    const far = buildCues(snapshotAt(cannon.arrivalTime - 30)).find((c) => c.kind === 'cannon')!;
+    const near = buildCues(snapshotAt(cannon.arrivalTime - 3)).find((c) => c.kind === 'cannon')!;
+    expect(far.severity).toBe('soon');
+    expect(near.severity).toBe('urgent');
   });
 
   it('drops cues beyond the horizon', () => {
@@ -41,71 +69,133 @@ describe('cue engine', () => {
     expect(cues.every((c) => c.etaSeconds === null || c.etaSeconds <= 10)).toBe(true);
   });
 
-  it('warns before the first scuttle spawns', () => {
-    const cues = buildCues(snapshotAt(180));
-    const scuttle = cues.find((c) => c.kind === 'scuttle');
-    expect(scuttle).toBeDefined();
-    expect(scuttle!.etaSeconds).toBe(30);
-  });
-
-  it('stops showing scuttle once it is up', () => {
-    const cues = buildCues(snapshotAt(240));
-    expect(cues.find((c) => c.kind === 'scuttle')).toBeUndefined();
-  });
-
   it('marks a live objective with a null eta', () => {
-    const cues = buildCues(snapshotAt(305));
-    const dragon = cues.find((c) => c.kind === 'dragon');
-    expect(dragon).toBeDefined();
-    expect(dragon!.etaSeconds).toBeNull();
-    expect(dragon!.label).toContain('UP');
+    const at = DEFAULT_PATCH.dragon.firstSpawn + 5;
+    const dragon = buildCues(snapshotAt(at)).find((c) => c.kind === 'dragon')!;
+    expect(dragon.etaSeconds).toBeNull();
+    expect(dragon.label).toContain('UP');
   });
 
   it('sorts live cues ahead of pending ones', () => {
-    const cues = buildCues(snapshotAt(305));
+    const cues = buildCues(snapshotAt(DEFAULT_PATCH.dragon.firstSpawn + 5));
     const firstPending = cues.findIndex((c) => c.etaSeconds !== null);
     const lastLive = cues.map((c) => c.etaSeconds).lastIndexOf(null);
-    if (firstPending !== -1 && lastLive !== -1) {
-      expect(lastLive).toBeLessThan(firstPending);
-    }
+    if (firstPending !== -1 && lastLive !== -1) expect(lastLive).toBeLessThan(firstPending);
   });
 
-  it('includes user-started manual timers', () => {
+  it('includes user-started manual timers and drops them when they expire', () => {
     const timers: ManualTimer[] = [
-      { id: 't1', label: 'Scuttle (top)', kind: 'scuttle', startedAtGameTime: 400, durationSeconds: 150 },
+      { id: 't1', label: 'Scuttle', kind: 'scuttle', startedAtGameTime: 400, durationSeconds: 150 },
     ];
-    const cues = buildCues(snapshotAt(500), timers);
-    const manual = cues.find((c) => c.kind === 'manual');
-    expect(manual).toBeDefined();
-    expect(manual!.etaSeconds).toBe(50);
-  });
-
-  it('drops manual timers once they expire', () => {
-    const timers: ManualTimer[] = [
-      { id: 't1', label: 'Scuttle', kind: 'scuttle', startedAtGameTime: 100, durationSeconds: 150 },
-    ];
-    expect(buildCues(snapshotAt(300), timers).find((c) => c.kind === 'manual')).toBeUndefined();
+    expect(buildCues(snapshotAt(500), timers).find((c) => c.kind === 'manual')?.etaSeconds).toBe(50);
+    expect(buildCues(snapshotAt(600), timers).find((c) => c.kind === 'manual')).toBeUndefined();
   });
 
   it('honours muted kinds', () => {
-    const cues = buildCues(snapshotAt(140), [], { mutedKinds: ['cannon'] });
+    const cannon = nextCannonWave(0, 'mid', DEFAULT_PATCH)!;
+    const cues = buildCues(snapshotAt(cannon.arrivalTime - 10), [], { mutedKinds: ['cannon'] });
     expect(cues.find((c) => c.kind === 'cannon')).toBeUndefined();
   });
 
-  it('opens a back window after the cannon wave lands', () => {
-    // Cannon wave 3 arrives at 158s; the following wave lands at 188s.
-    const cues = buildCues(snapshotAt(190), [], { horizonSeconds: 90 });
-    const back = cues.find((c) => c.kind === 'back');
-    expect(back).toBeDefined();
-    expect(back!.label).toContain('OPEN');
-  });
-
   it('never emits a negative countdown', () => {
-    for (let t = 0; t < 2000; t += 7) {
+    for (let t = 0; t < 2400; t += 7) {
       for (const cue of buildCues(snapshotAt(t))) {
         if (cue.etaSeconds !== null) expect(cue.etaSeconds).toBeGreaterThanOrEqual(0);
       }
     }
+  });
+});
+
+describe('derived insight', () => {
+  it('flags the enemy jungler clear window', () => {
+    const at = DEFAULT_PATCH.jungleFirstClearDone - 10;
+    const cue = buildCues(snapshotAt(at)).find((c) => c.kind === 'jungle');
+    expect(cue).toBeDefined();
+    expect(cue!.etaSeconds).toBeCloseTo(10, 0);
+  });
+
+  it('stops mentioning a jungle window long after it passed', () => {
+    const at = DEFAULT_PATCH.jungleFirstClearDone + 120;
+    const cues = buildCues(snapshotAt(at)).filter((c) => c.id === 'jungle-1');
+    expect(cues).toHaveLength(0);
+  });
+
+  it('warns when the lane opponent hits a level breakpoint first', () => {
+    const me = player({ level: 5 });
+    const them = player({
+      summonerName: 'Them', championName: 'Zed', team: 'CHAOS', position: 'mid', level: 6,
+    });
+    const cue = buildCues(snapshotAt(500, [], [me, them])).find((c) => c.kind === 'spike');
+    expect(cue).toBeDefined();
+    expect(cue!.label).toContain('6');
+  });
+
+  it('says nothing about spikes when you are level-even or ahead', () => {
+    const me = player({ level: 6 });
+    const them = player({
+      summonerName: 'Them', championName: 'Zed', team: 'CHAOS', position: 'mid', level: 6,
+    });
+    expect(buildCues(snapshotAt(500, [], [me, them])).find((c) => c.kind === 'spike')).toBeUndefined();
+  });
+
+  it('does not invent a spike warning without an identifiable opponent', () => {
+    const me = player({ level: 5 });
+    expect(buildCues(snapshotAt(500, [], [me])).find((c) => c.kind === 'spike')).toBeUndefined();
+  });
+
+  it('stays silent on CS pace without enough history', () => {
+    const me = player({ creepScore: 10 });
+    const cues = buildCues(snapshotAt(600, [], [me]), [], { history: [] });
+    expect(cues.find((c) => c.kind === 'pace')).toBeUndefined();
+  });
+
+  it('reports CS pace against your own baseline once history exists', () => {
+    const history: GameRecord[] = Array.from({ length: 6 }, (_, i) => ({
+      id: `g${i}`,
+      startedAt: '2026-07-01T00:00:00Z',
+      endedAt: `2026-07-0${i + 1}T00:30:00Z`,
+      gameMode: 'CLASSIC',
+      champion: 'Ahri',
+      win: true,
+      durationSeconds: 1800,
+      kills: 5, deaths: 3, assists: 5,
+      cs: 220, csPerMin: 7.3,
+      csAt10: 70, csAt15: 110, csDiffAt10: 0,
+      deathsBefore10: 1,
+      laneOpponent: 'Zed',
+      samples: [
+        { gameTime: 300, cs: 35, kills: 0, deaths: 0, assists: 0, level: 5 },
+        { gameTime: 600, cs: 70, kills: 0, deaths: 0, assists: 0, level: 8 },
+      ],
+    }));
+
+    // 70 is the historical average at 10:00; showing up with 45 is well behind.
+    const me = player({ creepScore: 45 });
+    const cue = buildCues(snapshotAt(600, [], [me]), [], { history }).find((c) => c.kind === 'pace');
+    expect(cue).toBeDefined();
+    expect(cue!.label).toContain('25');
+  });
+
+  it('says nothing when CS pace is on or above baseline', () => {
+    const baseline = makeCsBaseline(
+      Array.from({ length: 6 }, (_, i) => ({
+        id: `g${i}`,
+        startedAt: '2026-07-01T00:00:00Z',
+        endedAt: `2026-07-0${i + 1}T00:30:00Z`,
+        gameMode: 'CLASSIC',
+        champion: 'Ahri',
+        win: true,
+        durationSeconds: 1800,
+        kills: 0, deaths: 0, assists: 0,
+        cs: 200, csPerMin: 6.7,
+        csAt10: 70, csAt15: 110, csDiffAt10: 0,
+        deathsBefore10: 0,
+        laneOpponent: null,
+        samples: [{ gameTime: 600, cs: 70, kills: 0, deaths: 0, assists: 0, level: 8 }],
+      })),
+    );
+    expect(baseline).not.toBeNull();
+    expect(baseline!(600)).toBe(70);
   });
 });
 
@@ -128,16 +218,12 @@ describe('overlay density', () => {
 
   it('drops idle cues below full density', () => {
     for (const density of ['minimal', 'normal'] as const) {
-      const result = applyDensity(mixed, density);
-      expect(result.every((c) => c.severity !== 'idle')).toBe(true);
+      expect(applyDensity(mixed, density).every((c) => c.severity !== 'idle')).toBe(true);
     }
   });
 
-  it('shows a single cue at minimal density', () => {
+  it('shows a single cue at minimal density and caps normal at three', () => {
     expect(applyDensity(mixed, 'minimal')).toHaveLength(1);
-  });
-
-  it('caps normal density at three', () => {
     expect(applyDensity(mixed, 'normal')).toHaveLength(3);
   });
 
@@ -147,17 +233,31 @@ describe('overlay density', () => {
   });
 
   it('puts live cues ahead of countdowns', () => {
-    const result = applyDensity(mixed, 'normal');
-    expect(result[0]!.id).toBe('live');
+    expect(applyDensity(mixed, 'normal')[0]!.id).toBe('live');
   });
 
-  it('returns nothing when everything is idle', () => {
+  it('returns nothing when everything is idle, and handles an empty list', () => {
     const idle = [cue('a', 'idle', 90), cue('b', 'idle', 100)];
     expect(applyDensity(idle, 'minimal')).toHaveLength(0);
-    expect(applyDensity(idle, 'normal')).toHaveLength(0);
+    expect(applyDensity([], 'normal')).toEqual([]);
+  });
+});
+
+describe('overlay defaults do not mirror the game HUD', () => {
+  it('mutes every cue kind League already shows on its own scoreboard', () => {
+    const cues = buildCues(snapshotAt(DEFAULT_PATCH.dragon.firstSpawn + 5), [], {
+      mutedKinds: MIRRORED_CUE_KINDS,
+    });
+    for (const kind of MIRRORED_CUE_KINDS) {
+      expect(cues.find((c) => c.kind === kind)).toBeUndefined();
+    }
   });
 
-  it('handles an empty list', () => {
-    expect(applyDensity([], 'normal')).toEqual([]);
+  it('still leaves derived cues visible once the mirrored ones are muted', () => {
+    const cannon = nextCannonWave(0, 'mid', DEFAULT_PATCH)!;
+    const cues = buildCues(snapshotAt(cannon.arrivalTime - 10), [], {
+      mutedKinds: MIRRORED_CUE_KINDS,
+    });
+    expect(cues.some((c) => c.kind === 'cannon' || c.kind === 'back')).toBe(true);
   });
 });

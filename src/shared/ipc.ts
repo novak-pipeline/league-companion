@@ -69,6 +69,15 @@ export interface AppSettings {
   targets: TrendTargets;
   /** Extra lockfile locations for non-standard League installs. */
   lockfilePaths: string[];
+  /**
+   * Seconds to add to (or subtract from) the built-in wave travel estimate.
+   *
+   * How long a wave takes to reach lane is the least certain number in the
+   * patch config and the one the cannon countdown depends on most. Rather than
+   * present an estimate as fact, the user can watch one game, see how far off
+   * the countdown lands, and dial it in.
+   */
+  waveArrivalOffsetSeconds: number;
 }
 
 /** Settings as the renderer sees them: secrets replaced by presence flags. */
@@ -104,6 +113,8 @@ export interface CompanionState {
   jobStatus: DataJobStatus;
   /** Non-fatal problems worth showing the user, e.g. an expired API key. */
   notices: string[];
+  /** Which timing config is loaded, and which of its values are unverified. */
+  patchInfo: { label: string; caveats: Array<{ field: string; note: string }> };
 }
 
 /** Commands the renderer can issue. */

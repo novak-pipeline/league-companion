@@ -47,7 +47,6 @@ export type GameEventKind =
   | 'DragonKill'
   | 'HeraldKill'
   | 'BaronKill'
-  | 'AtakhanKill'
   | 'HordeKill'
   | 'Unknown';
 
@@ -81,6 +80,16 @@ export interface GameSnapshot {
 // Cue stream — the overlay's only input
 // ---------------------------------------------------------------------------
 
+/**
+ * Cue kinds split into two groups, and the split is the whole design:
+ *
+ *  - **Derived** (`cannon`, `back`, `jungle`, `roam`, `pace`, `spike`) — things
+ *    League does not tell you. This is what the overlay is for.
+ *  - **Mirrored** (`dragon`, `herald`, `grubs`, `baron`, `scuttle`, `wave`) —
+ *    things the game's own HUD already shows. Useful on the second monitor,
+ *    muted on the overlay by default, because redrawing the game's scoreboard
+ *    on top of the game is noise.
+ */
 export type CueKind =
   | 'wave'
   | 'cannon'
@@ -89,10 +98,23 @@ export type CueKind =
   | 'herald'
   | 'grubs'
   | 'baron'
-  | 'atakhan'
   | 'back'
+  | 'jungle'
+  | 'roam'
+  | 'pace'
+  | 'spike'
   | 'manual'
   | 'reminder';
+
+/** Cue kinds that duplicate League's own HUD. Muted on the overlay by default. */
+export const MIRRORED_CUE_KINDS: CueKind[] = [
+  'dragon',
+  'herald',
+  'grubs',
+  'baron',
+  'scuttle',
+  'wave',
+];
 
 /**
  * How loud the cue should be. The overlay maps these to colour and size; the
